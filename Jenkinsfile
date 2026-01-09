@@ -8,11 +8,17 @@ pipeline {
             }
         }
         stage('Start Wiremock') {
-            steps {
-                bat 'java -jar wiremock\\wiremock.jar --port 8081 --root-dir wiremock &'
-                bat 'timeout /t 10'
-            }
-        }
+    steps {
+        bat '''
+            if not exist wiremock\\wiremock.jar (
+                echo Descargando Wiremock...
+                powershell -Command "Invoke-WebRequest -Uri 'https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.13.2/wiremock-standalone-3.13.2.jar' -OutFile 'wiremock\\wiremock.jar'"
+            )
+            java -jar wiremock\\wiremock.jar --port 8081 --root-dir wiremock &
+        '''
+        bat 'timeout /t 10'
+    }
+}
         stage('Unit Tests') {
             steps {
                 bat 'python -m pytest test\\unit -v --junitxml=unit-test-report.xml'
