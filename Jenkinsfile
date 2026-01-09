@@ -7,9 +7,9 @@ pipeline {
                 git branch: 'master', url: 'https://github.com/eternalscythe/cp1-unir'
             }
         }
-       stage('Start Wiremock') {
+     stage('Start Wiremock') {
     steps {
-        bat 'java -jar wiremock\\wiremock.jar --port 8081 --root-dir wiremock &'
+        bat 'start /B java -jar wiremock\\wiremock.jar --port 8081 --root-dir wiremock'
         bat 'timeout /t 10'
     }
 }
@@ -33,10 +33,10 @@ pipeline {
                 }
             }
         }
-        stage('Stop Wiremock') {
-            steps {
-                bat 'taskkill /f /im java.exe 2>nul || echo "Wiremock no estaba corriendo"'
-            }
-        }
+       stage('Stop Wiremock') {
+    steps {
+        bat 'taskkill /f /im java.exe 2>nul || echo "Wiremock ya estaba detenido"'
+    }
+}
     }
 }
