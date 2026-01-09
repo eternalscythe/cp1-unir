@@ -9,7 +9,7 @@ pipeline {
         }
         stage('Start Wiremock') {
             steps {
-                bat 'java -jar wiremock\\wiremock-standalone-3.12.2.jar --port 8081 --root-dir wiremock &'
+                bat 'java -jar wiremock\\wiremock.jar --port 8081 --root-dir wiremock &'
                 bat 'timeout /t 10'
             }
         }
