@@ -7,10 +7,10 @@ pipeline {
                 git branch: 'master', url: 'https://github.com/eternalscythe/cp1-unir'
             }
         }
-     stage('Start Wiremock') {
+   stage('Start Wiremock') {
     steps {
         bat 'start /B java -jar wiremock\\wiremock.jar --port 8081 --root-dir wiremock'
-        bat 'timeout /t 10'
+        powershell 'Start-Sleep -Seconds 10'
     }
 }
         stage('Unit Tests') {
