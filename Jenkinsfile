@@ -7,12 +7,22 @@ pipeline {
                 git branch: 'master', url: 'https://github.com/eternalscythe/cp1-unir.git'
             }
         }
-        stage('Start Wiremock') {
-            steps {
-                bat 'start /B java -jar wiremock\\wiremock.jar --port 8081 --root-dir wiremock'
-                bat 'ping -n 11 127.0.0.1 >nul'
-            }
-        }
+       stage('Start Wiremock') {
+    steps {
+        // 1. INICIAR WIREMOCK EN EL PUERTO CORRECTO (9090, no 8081)
+        bat 'start /B java -jar wiremock\\wiremock.jar --port 9090 --root-dir wiremock'
+        // Espera 5 segundos (usa ping para simular espera)
+        bat 'ping -n 6 127.0.0.1 >nul'
+    }
+}
+stage('Start Flask App') {
+    steps {
+        // 2. INICIAR LA APLICACIÓN FLASK EN SEGUNDO PLANO
+        bat 'start /B C:\\Python313\\python.exe -m flask --app app\\api run --port 5000'
+        // Espera a que Flask esté listo (5 segundos)
+        bat 'ping -n 6 127.0.0.1 >nul'
+    }
+}
         stage('Unit Tests') {
             steps {
                 bat 'C:\\Python313\\python.exe -m pytest test\\unit -v --junitxml=unit-test-report.xml'
