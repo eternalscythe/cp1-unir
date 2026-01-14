@@ -4,7 +4,7 @@ pipeline {
     stages {
         // ETAPA 1: En el NODO MASTER
         stage('Checkout en Master') {
-            agent { label 'master' }
+            agent any
             steps {
                 git branch: 'master', url: 'https://github.com/eternalscythe/cp1-unir.git'
                 stash name: 'codigo-fuente', includes: '**/*'
@@ -52,7 +52,7 @@ pipeline {
 
         // ETAPA 4: Reportes finales en MASTER
         stage('Reportes Finales en Master') {
-            agent { label 'master' }
+            agent any
             steps {
                 unstash 'reporte-unit'
                 unstash 'reporte-rest'
