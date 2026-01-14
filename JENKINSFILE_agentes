@@ -1,78 +1,66 @@
 pipeline {
-    agent any
+    agent none // ¡IMPORTANTE! Sin agente global.
 
-    options { skipDefaultCheckout() }
-
-     stages {
-        stage('Get Code') {
+    stages {
+        // ETAPA 1: En el NODO MASTER
+        stage('Checkout en Master') {
+            agent { label 'master' }
             steps {
-                // Obtener código del repo
-                git 'https://github.com/anieto-unir/helloworld.git'
-	            echo WORKSPACE
-                bat 'dir'
-                stash name:'code', includes:'**'
-            }
-        }
-    
-        stage('Build') {
-           steps {
-              echo 'Eyyy, esto es Python. No hay que compilar nada!!!'
-           }
-        }
-        
-        stage('Tests')
-        {
-            parallel
-            {
-                stage('Unit') {
-                    agent {label 'agent1'}
-                    steps {
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                            unstash name:'code'
-                            sh '''
-                                ls -la
-                                export PYTHONPATH=${WORKSPACE}
-                                /home/agent1/.local/bin/pytest --junitxml=result-unit.xml test/unit
-                            '''
-                            stash name:'unit-res', includes:'result-unit.xml'
-                       }
-                    }
-                }   
-                
-                
-                stage('Rest') {
-                    agent {label 'agent2'}
-                    steps {
-                      catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                        unstash name:'code'
-                        sh '''
-                            export FLASK_APP=app/api.py                          
-                            /home/agent2/.local/bin/flask run &
-
-                            sleep 4
-
-                            java -jar /home/agent2/wiremock/wiremock-standalone-3.3.1.jar --port 9090 --root-dir /home/agent2/wiremock &
-                            export PYTHONPATH=${WORKSPACE}
-                            
-                            sleep 15
-                            
-                            /home/agent2/.local/bin/pytest --junitxml=result-rest.xml test/rest
-                        '''
-                      }
-                      stash name:'rest-res', includes:'result-rest.xml'
-                    }    
-                }                
-                
+                git branch: 'master', url: 'https://github.com/eternalscythe/cp1-unir.git'
+                stash name: 'codigo-fuente', includes: '**/*'
+                // DIAGNÓSTICO (ENTREGABLE)
+                bat 'whoami'
+                bat 'hostname'
+                bat 'echo Workspace: %WORKSPACE%'
             }
         }
 
-        stage('Results') {
+        // ETAPA 2: En tu AGENTE1 (label "agente1")
+        stage('Unit Tests en Agente1') {
+            agent { label 'agente1' }
             steps {
-                unstash name:'unit-res'
-                unstash name:'rest-res'
-                junit 'result*.xml' 
+                unstash 'codigo-fuente'
+                bat 'C:\\Python313\\python.exe -m pytest test\\unit -v --junitxml=unit-test-report.xml'
+                stash name: 'reporte-unit', includes: 'unit-test-report.xml'
+                // DIAGNÓSTICO (ENTREGABLE)
+                bat 'whoami'
+                bat 'hostname'
             }
         }
-     
+
+        // ETAPA 3: En tu AGENTE2 (label "agente2")
+        stage('Integration Tests en Agente2') {
+            agent { label 'agente2' }
+            steps {
+                unstash 'codigo-fuente'
+                // Iniciar servicios
+                bat 'start /B java -jar wiremock\\wiremock.jar --port 9090 --root-dir wiremock'
+                bat 'ping -n 6 127.0.0.1 >nul'
+                bat 'start /B C:\\Python313\\python.exe -m flask --app app\\api run --port 5000'
+                bat 'ping -n 6 127.0.0.1 >nul'
+                // Ejecutar pruebas
+                bat 'C:\\Python313\\python.exe -m pytest test\\rest -v --junitxml=rest-test-report.xml'
+                stash name: 'reporte-rest', includes: 'rest-test-report.xml'
+                // Limpiar servicios en ESTE agente
+                bat 'taskkill /F /IM python.exe 2>nul'
+                bat 'taskkill /F /IM java.exe 2>nul'
+                // DIAGNÓSTICO (ENTREGABLE)
+                bat 'whoami'
+                bat 'hostname'
+            }
+        }
+
+        // ETAPA 4: Reportes finales en MASTER
+        stage('Reportes Finales en Master') {
+            agent { label 'master' }
+            steps {
+                unstash 'reporte-unit'
+                unstash 'reporte-rest'
+                junit 'unit-test-report.xml'
+                junit 'rest-test-report.xml'
+                bat 'whoami'
+                bat 'hostname'
+            }
+        }
     }
 }
