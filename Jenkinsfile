@@ -48,28 +48,37 @@ pipeline {
 }
         }
 
-        // ETAPA 4: Análisis de Código Estático (Flake8)
+         // ETAPA 4: Análisis de Código Estático (Flake8) - CORREGIDA
         stage('Static') {
             steps {
                 script {
                     bat "C:\\Python313\\python.exe -m flake8 . --count --exit-zero > flake8-report.txt"
                     def report = readFile('flake8-report.txt').trim()
-                    echo "Flake8 encontró ${report} problemas."
                     
-                    // Aplicar umbrales de la guía
-                    def issues = report.isInteger() ? report.toInteger() : 0
+                    // EXTRAER EL NÚMERO: Busca la última palabra que sea un número.
+                    def issues = 0
+                    def palabras = report.split()
+                    for (palabra in palabras.reverse()) {
+                        if (palabra.isInteger()) {
+                            issues = palabra.toInteger()
+                            break
+                        }
+                    }
+                    echo "Flake8 encontró ${issues} problemas."
+                    
+                    // APLICAR UMBRALES SIN DETENER EL PIPELINE
                     if (issues >= 10) {
-                        currentBuild.result = 'FAILURE'
-                        error("Flake8: 10+ hallazgos - BUILD FALLIDO")
+                        currentBuild.result = 'FAILURE' // Marca como fallido, pero sigue.
+                        echo "⚠️  Flake8: 10+ hallazgos - El estado del BUILD es FALLIDO, pero se continúa."
                     } else if (issues >= 8) {
-                        currentBuild.result = 'UNSTABLE'
-                        echo "Flake8: 8-9 hallazgos - BUILD INESTABLE"
+                        currentBuild.result = 'UNSTABLE' // Marca como inestable, pero sigue.
+                        echo "⚠️  Flake8: 8+ hallazgos - El estado del BUILD es INESTABLE, pero se continúa."
                     }
                 }
             }
         }
 
-        // ETAPA 5: Pruebas de Seguridad (Bandit)
+        // ETAPA 5: Pruebas de Seguridad (Bandit) - CORREGIDA
         stage('Security Test') {
             steps {
                 script {
@@ -78,18 +87,17 @@ pipeline {
                     def totalIssues = banditReport.metrics.total_issues
                     echo "Bandit encontró ${totalIssues} problemas de seguridad."
                     
-                    // Aplicar umbrales de la guía
+                    // APLICAR UMBRALES SIN DETENER EL PIPELINE
                     if (totalIssues >= 4) {
                         currentBuild.result = 'FAILURE'
-                        error("Bandit: 4+ hallazgos - BUILD FALLIDO")
+                        echo "⚠️  Bandit: 4+ hallazgos - El estado del BUILD es FALLIDO, pero se continúa."
                     } else if (totalIssues >= 2) {
                         currentBuild.result = 'UNSTABLE'
-                        echo "Bandit: 2-3 hallazgos - BUILD INESTABLE"
+                        echo "⚠️  Bandit: 2-3 hallazgos - El estado del BUILD es INESTABLE, pero se continúa."
                     }
                 }
             }
         }
-
         // ETAPA 6: Pruebas de Cobertura (Coverage)
         stage('Coverage') {
             steps {
