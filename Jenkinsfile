@@ -1,52 +1,38 @@
 pipeline {
-    agent any
+    agent none // Definimos el agente en cada etapa
 
     stages {
-        stage('Checkout') {
+        // Etapa 1: Iniciar Wiremock (se ejecutará en primer plano, bloqueando este paso)
+        stage('Start Wiremock') {
+            agent { label 'agente2' } // Mismo agente que las pruebas
             steps {
-                git branch: 'master', url: 'https://github.com/eternalscythe/cp1-unir.git'
+                bat 'java -jar wiremock\\wiremock.jar --port 9090 --root-dir wiremock'
             }
         }
-       stage('Start Wiremock') {
-    steps {
-        // 1. INICIAR WIREMOCK EN EL PUERTO CORRECTO (9090, no 8081)
-        bat 'start /B java -jar wiremock\\wiremock.jar --port 9090 --root-dir wiremock'
-        // Espera 5 segundos (usa ping para simular espera)
-        bat 'ping -n 6 127.0.0.1 >nul'
-    }
-}
-stage('Start Flask App') {
-    steps {
-        // 2. INICIAR LA APLICACIÓN FLASK EN SEGUNDO PLANO
-        bat 'start /B C:\\Python313\\python.exe -m flask --app app\\api run --port 5000'
-        // Espera a que Flask esté listo (5 segundos)
-        bat 'ping -n 1 127.0.0.1 >nul'
-    }
-}
-        stage('Unit Tests') {
-            steps {
-                bat 'C:\\Python313\\python.exe -m pytest test\\unit -v --junitxml=unit-test-report.xml'
-            }
-            post {
-                always {
-                    junit 'unit-test-report.xml'
+        // Etapa 2 (en paralelo): Iniciar Flask y ejecutar pruebas
+        stage('Run Integration Tests') {
+            parallel {
+                stage('Start Flask App') {
+                    steps {
+                        bat 'C:\\Python313\\python.exe -m flask --app app\\api run --port 5000'
+                    }
+                }
+                stage('Execute Tests') {
+                    steps {
+                        // Esperar un momento a que Flask arranque
+                        bat 'ping -n 10 127.0.0.1 >nul'
+                        // Ejecutar las pruebas de integración
+                        bat 'C:\\Python313\\python.exe -m pytest test\\rest -v --junitxml=rest-test-report.xml'
+                    }
                 }
             }
         }
-        stage('Integration Tests') {
-            steps {
-                bat 'C:\\Python313\\python.exe -m pytest test\\rest -v --junitxml=rest-test-report.xml'
-            }
-            post {
-                always {
-                    junit 'rest-test-report.xml'
-                }
-            }
-        }
-        stage('Stop Wiremock') {
-            steps {
-                bat 'taskkill /f /im java.exe 2>nul || echo "Wiremock ya detenido"'
-            }
+    }
+    post {
+        always {
+            // Limpieza garantizada: detener los servicios
+            bat 'taskkill /F /IM java.exe 2>nul || echo "No Wiremock process"'
+            bat 'taskkill /F /IM python.exe 2>nul || echo "No Flask process"'
         }
     }
 }
