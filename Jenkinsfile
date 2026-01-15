@@ -81,18 +81,27 @@ pipeline {
         stage('Security Test') {
             steps {
                 script {
+                    // 1. Ejecuta bandit de manera que siempre continúe
                     bat "C:\\Python313\\python.exe -m bandit -r . -f json -o bandit-report.json --exit-zero 2>nul"
-                    def banditReport = readJSON file: 'bandit-report.json'
-                    def totalIssues = banditReport.metrics.total_issues
+
+                    // 2. Lee y parsea el JSON de forma manual y segura
+                    def banditReport = readFile('bandit-report.json').trim()
+
+                    // Busca el patrón '"total_issues": X' en el texto del JSON
+                    def totalIssues = 0
+                    def match = banditReport =~ /"total_issues"\s*:\s*(\d+)/
+                    if (match) {
+                        totalIssues = match[0][1].toInteger()
+                    }
                     echo "Bandit encontró ${totalIssues} problemas de seguridad."
 
-                    // APLICAR UMBRALES SIN DETENER EL PIPELINE
+                    // 3. Aplica los umbrales CAMBIANDO SOLO EL ESTADO, SIN DETENER
                     if (totalIssues >= 4) {
                         currentBuild.result = 'FAILURE'
-                        echo '⚠️  Bandit: 4+ hallazgos - El estado del BUILD es FALLIDO, pero se continúa.'
-                    } else if (totalIssues >= 2) {
+                        echo '⚠️  Bandit: 4+ hallazgos. Estado marcado como FALLIDO (se continúa).'
+            } else if (totalIssues >= 2) {
                         currentBuild.result = 'UNSTABLE'
-                        echo '⚠️  Bandit: 2-3 hallazgos - El estado del BUILD es INESTABLE, pero se continúa.'
+                        echo '⚠️  Bandit: 2-3 hallazgos. Estado marcado como INESTABLE (se continúa).'
                     }
                 }
             }
