@@ -1,6 +1,8 @@
 import http.client
 import os
 import unittest
+import json
+from urllib.error import HTTPError
 from urllib.request import urlopen
 
 import pytest
@@ -34,6 +36,26 @@ class TestApi(unittest.TestCase):
         self.assertEqual(
             response.read().decode(), "8", "ERROR SQRT"
         )
+              # PRUEBAS PARA EL RETO 3 - AJUSTADAS AL ESTILO ORIGINAL
+    def test_api_multiply(self):
+        url = f"{BASE_URL}/calc/multiply/5/4"
+        response = urlopen(url, timeout=DEFAULT_TIMEOUT)
+        self.assertEqual(response.status, http.client.OK)
+        self.assertEqual(response.read().decode(), "20")  # Texto plano, no JSON
+
+    def test_api_divide(self):
+        url = f"{BASE_URL}/calc/divide/20/5"
+        response = urlopen(url, timeout=DEFAULT_TIMEOUT)
+        self.assertEqual(response.status, http.client.OK)
+        self.assertEqual(response.read().decode(), "4")  # Texto plano, no JSON
+
+    def test_api_divide_by_zero(self):
+        url = f"{BASE_URL}/calc/divide/10/0"
+        try:
+            response = urlopen(url, timeout=DEFAULT_TIMEOUT)
+            self.assertEqual(response.status, http.client.NOT_ACCEPTABLE)  # 406
+        except HTTPError as e:
+            self.assertEqual(e.code, http.client.NOT_ACCEPTABLE)  # 406
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
