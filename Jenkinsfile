@@ -20,7 +20,7 @@ stage('Start Flask App') {
         // 2. INICIAR LA APLICACIÓN FLASK EN SEGUNDO PLANO
         bat 'start /B C:\\Python313\\python.exe -m flask --app app\\api run --port 5000'
         // Espera a que Flask esté listo (5 segundos)
-        bat 'ping -n 2 127.0.0.1 >nul'
+        bat 'ping -n 1 127.0.0.1 >nul'
     }
 }
         stage('Unit Tests') {
