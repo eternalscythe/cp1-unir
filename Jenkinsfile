@@ -9,10 +9,10 @@ pipeline {
             }
         }
         stage('Setup Python Dependencies') {
-    steps {
-        bat 'C:\\Python313\\python.exe -m pip install pytest flask flake8 bandit coverage'
-    }
-}
+            steps {
+                bat 'C:\\Python313\\python.exe -m pip install pytest flask flake8 bandit coverage'
+            }
+        }
 
         // ETAPA 2: Pruebas Unitarias (¡SOLO SE EJECUTAN UNA VEZ!)
         stage('Unit') {
@@ -34,45 +34,44 @@ pipeline {
                     bat 'start /B java -jar wiremock\\wiremock.jar --port 9090 --root-dir wiremock'
                     bat 'start /B C:\\Python313\\python.exe -m flask --app app\\api run --port 5000'
                     sleep 10 // Esperar a que los servicios arranquen
-                    
+
                     echo '--- Ejecutando pruebas REST ---'
                     bat "C:\\Python313\\python.exe -m pytest test\\rest -v --junitxml=rest-test-report.xml"
                 }
             }
-           post {
-    always {
-        // COMENTA O ELIMINA ESTA LÍNEA PELIGROSA:
-        // bat 'taskkill /F /IM java.exe   2>nul  || echo "Wiremock cerrado"'
-        bat 'taskkill /F /IM python.exe 2>nul || echo "Flask cerrado"'
-    }
-}
+            post {
+                always {
+                    // COMENTA O ELIMINA ESTA LÍNEA PELIGROSA:
+                    // bat 'taskkill /F /IM java.exe   2>nul  || echo "Wiremock cerrado"'
+                    bat 'taskkill /F /IM python.exe 2>nul || echo "Flask cerrado"'
+                }
+            }
         }
 
-         // ETAPA 4: Análisis de Código Estático (Flake8) - CORREGIDA
+        // ETAPA 4: Análisis de Código Estático (Flake8) - VERSIÓN SEGURA
         stage('Static') {
             steps {
                 script {
+                    // 1. Ejecutar flake8 y guardar salida
                     bat "C:\\Python313\\python.exe -m flake8 . --count --exit-zero > flake8-report.txt"
-                    def report = readFile('flake8-report.txt').trim()
-                    
-                    // EXTRAER EL NÚMERO: Busca la última palabra que sea un número.
+                    def rawOutput = readFile('flake8-report.txt').trim()
+
+                    // 2. Encontrar el número de problemas de forma SEGURA (sin .reverse())
                     def issues = 0
-                    def palabras = report.split()
-                    for (palabra in palabras.reverse()) {
-                        if (palabra.isInteger()) {
-                            issues = palabra.toInteger()
-                            break
-                        }
+                    // Busca el ÚLTIMO número en toda la salida de texto
+                    def matcher = rawOutput =~ /(\d+)(?!.*\d)/
+                    if (matcher.find()) {
+                        issues = matcher.group(1).toInteger()
                     }
                     echo "Flake8 encontró ${issues} problemas."
-                    
-                    // APLICAR UMBRALES SIN DETENER EL PIPELINE
+
+                    // 3. Aplicar umbrales (NO detiene el pipeline)
                     if (issues >= 10) {
-                        currentBuild.result = 'FAILURE' // Marca como fallido, pero sigue.
-                        echo "⚠️  Flake8: 10+ hallazgos - El estado del BUILD es FALLIDO, pero se continúa."
+                        currentBuild.result = 'FAILURE'
+                        echo '⚠️  Flake8: 10+ hallazgos. Estado: FALLIDO (se continúa).'
                     } else if (issues >= 8) {
-                        currentBuild.result = 'UNSTABLE' // Marca como inestable, pero sigue.
-                        echo "⚠️  Flake8: 8+ hallazgos - El estado del BUILD es INESTABLE, pero se continúa."
+                        currentBuild.result = 'UNSTABLE'
+                        echo '⚠️  Flake8: 8+ hallazgos. Estado: INESTABLE (se continúa).'
                     }
                 }
             }
@@ -86,14 +85,14 @@ pipeline {
                     def banditReport = readJSON file: 'bandit-report.json'
                     def totalIssues = banditReport.metrics.total_issues
                     echo "Bandit encontró ${totalIssues} problemas de seguridad."
-                    
+
                     // APLICAR UMBRALES SIN DETENER EL PIPELINE
                     if (totalIssues >= 4) {
                         currentBuild.result = 'FAILURE'
-                        echo "⚠️  Bandit: 4+ hallazgos - El estado del BUILD es FALLIDO, pero se continúa."
+                        echo '⚠️  Bandit: 4+ hallazgos - El estado del BUILD es FALLIDO, pero se continúa.'
                     } else if (totalIssues >= 2) {
                         currentBuild.result = 'UNSTABLE'
-                        echo "⚠️  Bandit: 2-3 hallazgos - El estado del BUILD es INESTABLE, pero se continúa."
+                        echo '⚠️  Bandit: 2-3 hallazgos - El estado del BUILD es INESTABLE, pero se continúa.'
                     }
                 }
             }
@@ -107,28 +106,28 @@ pipeline {
                     // Generar reportes
                     bat "C:\\Python313\\python.exe -m coverage xml -o coverage.xml"
                     bat "C:\\Python313\\python.exe -m coverage html -d coverage_html"
-                    
+
                     // Obtener métricas de cobertura
                     def coverageOutput = bat(script: "C:\\Python313\\python.exe -m coverage report --format=total", returnStdout: true).trim()
                     echo "Cobertura total reportada: ${coverageOutput}"
-                    
+
                     // Extraer el porcentaje numérico
-                    def coverageLine = coverageOutput.find(/(\d+)%/);
+                    def coverageLine = coverageOutput.find(/(\d+)%/)
                     def lineCoverage = coverageLine ? coverageLine.replaceAll('[^0-9]', '').toInteger() : 0
-                    
+
                     // Umbrales de la guía para LÍNEAS
                     if (lineCoverage < 85) {
                         currentBuild.result = 'FAILURE'
                     } else if (lineCoverage < 95) {
                         currentBuild.result = 'UNSTABLE'
                     }
-                    
+
                     // OBTENER EL VALOR PARA "LÍNEA 90" (ENTREGABLE ESPECÍFICO)
                     echo "=== INICIO: Búsqueda del valor para 'línea 90' del microservicio suma ==="
                     def appCoverageDetail = bat(script: "C:\\Python313\\python.exe -m coverage report --include=\"app/suma.py\"", returnStdout: true)
                     echo appCoverageDetail
-                    echo "=== FIN: Detalle de cobertura para suma.py ==="
-                    // Busca manualmente en la salida la línea que diga "90" en la columna de cobertura.
+                    echo '=== FIN: Detalle de cobertura para suma.py ==='
+                // Busca manualmente en la salida la línea que diga "90" en la columna de cobertura.
                 }
             }
             post {
@@ -146,7 +145,7 @@ pipeline {
                     echo '--- Levantando Flask para las pruebas JMeter ---'
                     bat 'start /B C:\\Python313\\python.exe -m flask --app app\\api run --port 5000'
                     sleep 5
-                    
+
                     echo '--- Ejecutando plan de pruebas JMeter ---'
                     // Asegúrate de que la ruta a JMeter y tu test-plan.jmx sean correctas
                     bat 'C:\\jmeter\\apache-jmeter-5.6.3\\bin\\jmeter -n -t jmeter\\test-plan.jmx -l jmeter\\results.jtl -j jmeter\\jmeter.log'
@@ -164,7 +163,7 @@ pipeline {
 
     post {
         always {
-            echo "=== PIPELINE FINALIZADO ==="
+            echo '=== PIPELINE FINALIZADO ==='
             echo "Estado final del build: ${currentBuild.currentResult}"
         }
     }
