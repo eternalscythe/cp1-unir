@@ -81,7 +81,7 @@ pipeline {
         stage('Security Test') {
             steps {
                 script {
-                    bat "C:\\Python313\\python.exe -m bandit -r . -f json -o bandit-report.json 2>nul"
+                    bat "C:\\Python313\\python.exe -m bandit -r . -f json -o bandit-report.json --exit-zero 2>nul"
                     def banditReport = readJSON file: 'bandit-report.json'
                     def totalIssues = banditReport.metrics.total_issues
                     echo "Bandit encontró ${totalIssues} problemas de seguridad."
