@@ -8,6 +8,11 @@ pipeline {
                 checkout scm
             }
         }
+        stage('Setup Python Dependencies') {
+    steps {
+        bat 'C:\\Python313\\python.exe -m pip install pytest flask flake8 bandit coverage'
+    }
+}
 
         // ETAPA 2: Pruebas Unitarias (¡SOLO SE EJECUTAN UNA VEZ!)
         stage('Unit') {
@@ -34,13 +39,13 @@ pipeline {
                     bat "C:\\Python313\\python.exe -m pytest test\\rest -v --junitxml=rest-test-report.xml"
                 }
             }
-            post {
-                always {
-                    bat 'taskkill /F /IM python.exe 2>nul || echo "Flask cerrado"'
-                    bat 'taskkill /F /IM java.exe 2>nul || echo "Wiremock cerrado"'
-                    junit testResults: 'rest-test-report.xml', allowEmptyResults: true
-                }
-            }
+           post {
+    always {
+        // COMENTA O ELIMINA ESTA LÍNEA PELIGROSA:
+        // bat 'taskkill /F /IM java.exe   2>nul  || echo "Wiremock cerrado"'
+        bat 'taskkill /F /IM python.exe 2>nul || echo "Flask cerrado"'
+    }
+}
         }
 
         // ETAPA 4: Análisis de Código Estático (Flake8)
