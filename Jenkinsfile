@@ -68,7 +68,7 @@ pipeline {
                 SET FLASK_APP=app\\api.py
                 start flask run
                 ping -n 4 127.0.0.1
-                C:\\jmeter\\apache-jmeter-5.6.3\\bin\\jmeter -n -t C:\\DevOps\\CP1\\helloworld\\jmeter\\test-plan.jmx" -f -l flask.jtl
+                C:\\jmeter\\apache-jmeter-5.6.3\\bin\\jmeter -n -t C:\\DevOps\\CP1\\helloworld\\jmeter\\test-plan.jmx -f -l flask.jtl
              '''
              perfReport sourceDataFiles: 'flask.jtl'
             }
