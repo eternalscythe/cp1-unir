@@ -21,53 +21,18 @@ pipeline {
             }
         }
         
-               stage('Services') {
-            steps {
-                script {
-                    // 1. Iniciar Flask en segundo plano de forma tradicional
-                    bat 'SET FLASK_APP=app\\api.py'
-                    bat 'start /B flask run'
-                    
-                    // 2. Iniciar Wiremock de forma ROBUSTA y CAPTURAR su PID
-                    //    El truco está en usar 'cmd /c' y redirigir la salida.
-                    bat '''
-                        cd test\\wiremock
-                        cmd /c "start /B java -jar wiremock-standalone-3.13.2.jar --port 9090 --root-dir ." > ..\\..\\wiremock.log 2>&1
-                        echo %ERRORLEVEL% > ..\\..\\wiremock_pid.txt
-                        cd ..\\..
-                    '''
-                    // 3. Esperar con más tiempo (10 segundos)
-                    bat 'ping -n 10 127.0.0.1 >nul'
-                    // 4. Verificar que Wiremock está escuchando (DEBUG)
-                    bat 'netstat -an | findstr :9090 || echo Puerto 9090 NO encontrado'
-                    
-                    // 5. Ejecutar las pruebas
-                    bat '''
-                        SET PYTHONPATH=%WORKSPACE%
-                        pytest --junitxml=result.rest.xml test\\rest
-                    '''
-                }
-                junit 'result*.xml'
-            }
-            post {
-                always {
-                    // 6. MATAR PROCESOS de forma SEGURA y ESPECÍFICA
-                    script {
-                        // Intentar matar Flask por nombre de proceso
-                        bat 'taskkill /F /IM flask.exe 2>nul || taskkill /F /IM python.exe 2>nul || echo "No se pudo terminar Flask"'
-                        // Intentar matar Wiremock usando un PID pre-guardado (más seguro que matar todos los java.exe)
-                        // Si el archivo con el PID no existe, se omite.
-                        bat '''
-                            if exist wiremock_pid.txt (
-                                for /f "tokens=*" %%i in (wiremock_pid.txt) do (
-                                    taskkill /F /PID %%i 2>nul || echo No se pudo terminar Wiremock PID %%i
-                                )
-                                del wiremock_pid.txt 2>nul
-                            )
-                        '''
-                    }
-                }
-            }
+        stage('Services') {
+          steps {
+            bat '''
+                SET FLASK_APP=app\\api.py
+                start flask run
+                start java -jar test\\wiremock\\wiremock-standalone-3.13.2.jar --port 9090 --root-dir test\\wiremock
+                ping -n 10 127.0.0.1
+                SET PYTHONPATH=%WORKSPACE%
+                pytest --junitxml=result.rest.xml test\\rest
+            '''
+            junit 'result*.xml'
+          }
         }
         
         stage('Static') {
