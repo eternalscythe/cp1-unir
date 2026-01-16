@@ -1,119 +1,77 @@
 pipeline {
-    agent any
-
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
+  agent any
+      stages {
+          
+        stage('Get Code') {
+          steps {
+            git url: 'https://github.com/eternalscythe/cp1-unir'
+            echo WORKSPACE
+            bat 'dir'
+          }
         }
-
+        
         stage('Unit') {
-            steps {
-                // RUTA ABSOLUTA AL EJECUTABLE DE PYTHON
-                bat "C:\\Python313\\python.exe -m pytest test\\unit -v --junitxml=unit-test-report.xml"
-            }
-            post {
-                always {
-                    junit testResults: 'unit-test-report.xml', allowEmptyResults: true
+          steps {
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                    bat '''
+                        SET PYTHONPATH=%WORKSPACE%
+                        pytest test\\unit
+                    '''
                 }
             }
         }
-
-        stage('Rest') {
-            steps {
-                script {
-                    // Iniciar servicios con la ruta absoluta
-                    bat 'start /B java -jar wiremock\\wiremock.jar --port 9090 --root-dir wiremock'
-                    bat 'start /B C:\\Python313\\python.exe -m flask --app app\\api run --port 5000'
-                    sleep 10
-                    bat 'C:\\Python313\\python.exe -m pytest test\\rest -v --junitxml=rest-test-report.xml'
-                }
-            }
-            post {
-                always {
-                    // Matar solo procesos Python para no cerrar Jenkins
-                    bat 'taskkill /F /IM python.exe 2>nul || echo "No proceso Python para terminar"'
-                    // OPCIÓN SEGURA: NO MATAR JAVA. Wiremock se cerrará al final del workspace.
-                    // bat 'taskkill /F /IM java.exe 2>nul || echo "No proceso Java para terminar"'
-                    junit testResults: 'rest-test-report.xml', allowEmptyResults: true
-                }
-            }
+        
+        stage('Services') {
+          steps {
+            bat '''
+                SET FLASK_APP=app\\api.py
+                start flask run
+                start java -jar test\\wiremock\\wiremock-standalone-3.13.2.jar --port 9090 --root-dir test\\wiremock
+                timeout /t 10 /nobreak
+                SET PYTHONPATH=%WORKSPACE%
+                pytest --junitxml=result.rest.xml test\\rest
+            '''
+            junit 'result*.xml'
+          }
         }
-
+        
         stage('Static') {
-            steps {
-                script {
-                    bat 'C:\\Python313\\python.exe -m flake8 . --count --exit-zero > flake8-report.txt'
-                    def flake8Output = readFile('flake8-report.txt').trim()
-                    echo "Flake8 encontró: ${flake8Output} problemas."
-                    
-                    def numIssues = flake8Output.isInteger() ? flake8Output.toInteger() : 0
-                    if (numIssues >= 10) {
-                        currentBuild.result = 'FAILURE'
-                    } else if (numIssues >= 8) {
-                        currentBuild.result = 'UNSTABLE'
-                    }
-                }
-            }
+          steps {
+            bat 'flake8 --exit-zero --format=pylint app >flake8.out'
+            recordIssues tools: [flake8(name:'flake8', pattern:'flake8.out')], qualityGates: [[threshold:8, type: 'TOTAL', unstable:true], [threshold:10, type: 'TOTAL', unstable:false]]
+          }
         }
-
+        
         stage('Security') {
-            steps {
-                script {
-                    // Usar ruta absoluta y --exit-zero
-                    bat 'C:\\Python313\\python.exe -m bandit -r . -f json -o bandit-report.json --exit-zero 2>nul'
-                    def banditReport = readJSON file: 'bandit-report.json'
-                    def totalIssues = banditReport.metrics.total_issues
-                    echo "Bandit encontró: ${totalIssues} problemas."
-                    
-                    if (totalIssues >= 4) {
-                        currentBuild.result = 'FAILURE'
-                    } else if (totalIssues >= 2) {
-                        currentBuild.result = 'UNSTABLE'
-                    }
-                }
+        steps {
+            bat '''
+                bandit --exit-zero -r . -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"
+            '''
+            recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')], qualityGates: [[threshold: 2, type: 'TOTAL', unstable: true],[threshold: 4, type: 'TOTAL', unstable: false]]
             }
         }
-
-        stage('Coverage') {
+        
+        stage('Cobertura') {
             steps {
-                script {
-                    bat 'C:\\Python313\\python.exe -m coverage run --source=app -m pytest test\\unit'
-                    bat 'C:\\Python313\\python.exe -m coverage xml -o coverage.xml'
-                    bat 'C:\\Python313\\python.exe -m coverage html -d coverage_html'
-                    bat 'C:\\Python313\\python.exe -m coverage report'
-                }
-            }
-            post {
-                always {
-                    // Publicar resultados. Si falla esta línea, prueba con la otra opción.
-                    recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']])
-                    // publishCoverage adapters: [coberturaAdapter('coverage.xml')]
-                }
+                bat '''
+                    set PYTHONPATH=%WORKSPACE%
+                    coverage run --branch --source=app --omit=app\\_init_.py,app\\api.py -m pytest test\\unit
+                    coverage xml
+                '''
+                recordCoverage qualityGates: [[criticality: 'NOTE', integerThreshold: 95, metric: 'LINE', threshold: 95.0], [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], [criticality: 'NOTE', integerThreshold: 90, metric: 'BRANCH', threshold: 90.0], [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0]], tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']]
             }
         }
-
+        
         stage('Performance') {
-            steps {
-                script {
-                    bat 'start /B C:\\Python313\\python.exe -m flask --app app\\api run --port 5000'
-                    sleep 5
-                    // AJUSTA ESTA RUTA A TU INSTALACIÓN DE JMETER
-                    bat 'C:\\jmeter\\apache-jmeter-5.6.3\\bin\\jmeter -n -t jmeter\\test-plan.jmx -l jmeter\\results.jtl -j jmeter\\jmeter.log'
-                }
+        steps {
+            bat '''
+                SET FLASK_APP=app\\api.py
+                start flask run
+                ping -n 4 127.0.0.1
+               C:\\jmeter\\apache-jmeter-5.6.3\\bin\\jmeter -n -t test\\jmeter\\flask.jmx -f -l flask.jtl
+             '''
+             perfReport sourceDataFiles: 'flask.jtl'
             }
-            post {
-                always {
-                    bat 'taskkill /F /IM python.exe 2>nul || echo "No proceso Python para terminar"'
-                    perfReport sourceDataFiles: 'jmeter\\results.jtl'
-                }
-            }
-        }
-    }
-    post {
-        always {
-            echo "Pipeline completado. Resultado final: ${currentBuild.currentResult}"
         }
     }
 }
