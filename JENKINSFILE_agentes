@@ -8,7 +8,7 @@ pipeline {
             agent { label 'principal'}
             steps {
                 cleanWs()
-                git branch: 'feature_fix_coverage', url: 'https://github.com/eternalscythe/cp1-unir.git'
+                git url: 'https://github.com/eternalscythe/cp1-unir.git'
                 bat 'whoami & hostname & echo %WORKSPACE%'
                 stash name: 'code', includes: '**'
             }
