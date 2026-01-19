@@ -5,7 +5,7 @@ pipeline {
 
     stages {
         stage('Get Code') {
-            agent { label 'principal'}
+            agent { label 'master'}
             steps {
                 cleanWs()
                 git url: 'https://github.com/eternalscythe/cp1-unir.git'
