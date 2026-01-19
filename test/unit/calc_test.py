@@ -39,6 +39,23 @@ class TestCalculate(unittest.TestCase):
         self.assertRaises(TypeError, self.calc.divide, "2", 2)
         self.assertRaises(TypeError, self.calc.divide, 2, "2")
         self.assertRaises(TypeError, self.calc.divide, "2", "2")
+        
+    def test_divide_method_fails_with_zero_denominator(self):
+        """Verifica que dividir por cero lanza TypeError con el mensaje correcto."""
+        # Prueba con un numerador positivo
+        with self.assertRaises(TypeError) as context:
+            self.calc.divide(10, 0)
+        self.assertEqual(str(context.exception), "Division by zero is not possible")
+        
+        # (Opcional) Prueba con un numerador negativo para ser más exhaustivo
+        with self.assertRaises(TypeError) as context:
+            self.calc.divide(-5, 0)
+        self.assertEqual(str(context.exception), "Division by zero is not possible")
+        
+        # (Opcional) Prueba con numerador cero
+        with self.assertRaises(TypeError) as context:
+            self.calc.divide(0, 0)
+        self.assertEqual(str(context.exception), "Division by zero is not possible")  
 
     def test_multiply_method_returns_correct_result(self):
         self.assertEqual(4, self.calc.multiply(2, 2))
