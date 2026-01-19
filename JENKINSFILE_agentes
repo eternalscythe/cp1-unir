@@ -23,7 +23,6 @@ pipeline {
                         unstash 'code'
                         bat 'whoami & hostname & echo %WORKSPACE%'
                         
-                        // Pruebas Unitarias
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                             bat '''
                                 SET PYTHONPATH=%WORKSPACE%
@@ -31,17 +30,14 @@ pipeline {
                             '''
                         }
 
-                        // Cobertura
                         bat '''
                         set PYTHONPATH=%WORKSPACE%
                         coverage run --branch --source=app --omit=app\\_init_.py,app\\api.py -m pytest test\\unit
                         coverage xml
                         '''
 
-                        // Análisis Estático (Flake8)
                         bat 'flake8 --exit-zero --format=pylint app >flake8.out'
 
-                        // Seguridad (Bandit)
                         bat 'bandit --exit-zero -r . -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"'
 
                         stash name: 'quality-reports', includes: 'result.unit.xml, coverage.xml, flake8.out, bandit.out'
@@ -55,7 +51,6 @@ pipeline {
                         unstash 'code'
                         bat 'whoami & hostname & echo %WORKSPACE%'
                         
-                        // Integración (Rest)
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                             bat '''
                                 SET FLASK_APP=app\\api.py
@@ -68,7 +63,6 @@ pipeline {
                             '''
                         }
 
-                        // Rendimiento (JMeter)
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                             bat '''
                                 SET FLASK_APP=app\\api.py
