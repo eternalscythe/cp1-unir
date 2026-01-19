@@ -4,7 +4,7 @@ pipeline {
           
         stage('Get Code') {
           steps {
-            git url: 'https://github.com/eternalscythe/cp1-unir.git', branch 'feature_fix_coverage'
+            git branch 'feature_fix_coverage', url: 'https://github.com/eternalscythe/cp1-unir.git' 
             echo WORKSPACE
             bat 'dir'
           }
