@@ -80,7 +80,7 @@ pipeline {
         }
 
         stage('Publish Results') {
-            agent { label 'principal'}
+            agent { label 'built-in'}
             steps {
                 cleanWs()
                 unstash 'quality-reports'
