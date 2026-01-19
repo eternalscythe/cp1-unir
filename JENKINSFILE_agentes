@@ -1,72 +1,106 @@
 pipeline {
-    agent none // ¡IMPORTANTE! Sin agente global.
+    agent none 
+
+    options {skipDefaultCheckout()}
 
     stages {
-        // ETAPA 1: En el NODO MASTER
-        stage('Checkout en Master') {
-            agent any
+        stage('Get Code') {
+            agent { label 'principal'}
             steps {
-                git branch: 'master', url: 'https://github.com/eternalscythe/cp1-unir.git'
-                stash name: 'codigo-fuente', includes: '**/*'
-                // DIAGNÓSTICO (ENTREGABLE)
-                bat 'whoami'
-                bat 'hostname'
-                bat 'echo Workspace: %WORKSPACE%'
+                cleanWs()
+                git branch: 'feature_fix_coverage', url: 'https://github.com/eternalscythe/cp1-unir.git'
+                bat 'whoami & hostname & echo %WORKSPACE%'
+                stash name: 'code', includes: '**'
             }
         }
 
-        // ETAPA 2: En tu AGENTE1 (label "agente1")
-        stage('Unit Tests en Agente1') {
-            agent { label 'agente1' }
-            steps {
-                unstash 'codigo-fuente'
-                bat 'C:\\Python313\\python.exe -m pytest test\\unit -v --junitxml=unit-test-report.xml'
-                stash name: 'reporte-unit', includes: 'unit-test-report.xml'
-                // DIAGNÓSTICO (ENTREGABLE)
-                bat 'whoami'
-                bat 'hostname'
+        stage('Tests') {
+            parallel {
+                
+                stage('Code Quality') {
+                    agent { label 'agente1' } 
+                    steps {
+                        unstash 'code'
+                        bat 'whoami & hostname & echo %WORKSPACE%'
+                        
+                        // Pruebas Unitarias
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            bat '''
+                                SET PYTHONPATH=%WORKSPACE%
+                                pytest test\\unit
+                            '''
+                        }
+
+                        // Cobertura
+                        bat '''
+                        set PYTHONPATH=%WORKSPACE%
+                        coverage run --branch --source=app --omit=app\\_init_.py,app\\api.py -m pytest test\\unit
+                        coverage xml
+                        '''
+
+                        // Análisis Estático (Flake8)
+                        bat 'flake8 --exit-zero --format=pylint app >flake8.out'
+
+                        // Seguridad (Bandit)
+                        bat 'bandit --exit-zero -r . -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"'
+
+                        stash name: 'quality-reports', includes: 'result.unit.xml, coverage.xml, flake8.out, bandit.out'
+                    }
+                }
+
+                stage('Services') {
+                    agent { label 'agente2' }
+                    steps {
+
+                        unstash 'code'
+                        bat 'whoami & hostname & echo %WORKSPACE%'
+                        
+                        // Integración (Rest)
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            bat '''
+                                SET FLASK_APP=app\\api.py
+                                start flask run
+                                start java -jar test\\wiremock\\wiremock-standalone-3.13.2.jar --port 9090 --root-dir test\\wiremock
+                                ping -n 4 127.0.0.1
+                                SET PYTHONPATH=%WORKSPACE%
+                                pytest --junitxml=result.rest.xml test\\rest
+                                taskkill /IM flask.exe /F || ver > nul
+                            '''
+                        }
+
+                        // Rendimiento (JMeter)
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            bat '''
+                                SET FLASK_APP=app\\api.py
+                                start flask run
+                                ping -n 4 127.0.0.1
+                                 C:\\jmeter\\apache-jmeter-5.6.3\\bin\\jmeter -n -t C:\\DevOps\\CP1\\helloworld\\jmeter\\test-plan.jmx -f -l flask.jtl
+                                taskkill /IM flask.exe /F || ver > nul
+                            '''
+                        }
+
+                        stash name: 'service-reports', includes: 'result.rest.xml, flask.jtl'
+                    }
+                }
             }
         }
 
-        // ETAPA 3: En tu AGENTE2 (label "agente2")
-      stage('Integration Tests en Agente2') {
-    agent { label 'agente2' }
-    steps {
-        unstash 'codigo-fuente'
-        
-        // 1. INICIAR SERVICIOS de la forma MÁS SIMPLE
-        bat 'start "WIREMOCK_AGENT2" java -jar wiremock\\wiremock.jar --port 9090 --root-dir wiremock'
-        bat 'start "FLASK_AGENT2" C:\\Python313\\python.exe -m flask --app app\\api run --port 5000'
-        
-        // 2. ESPERA LARGA y SIMPLE (20 segundos)
-        bat 'ping -n 21 127.0.0.1 >nul'
-        
-        // 3. EJECUTAR PRUEBAS (lo único esencial)
-        bat 'C:\\Python313\\python.exe -m pytest test\\rest -v --junitxml=rest-test-report.xml'
-        
-        // 4. Guardar reporte
-        stash name: 'reporte-rest', includes: 'rest-test-report.xml'
-        
-        // 5. DIAGNÓSTICO (para el entregable)
-        bat 'whoami'
-        bat 'hostname'
-        
-        // 6. LIMPIEZA SUAVE (sin /F forzado, solo si existen)
-        bat 'taskkill /FI "WINDOWTITLE eq WIREMOCK_AGENT2" 2>nul'
-        bat 'taskkill /FI "WINDOWTITLE eq FLASK_AGENT2" 2>nul'
-    }
-}
-
-        // ETAPA 4: Reportes finales en MASTER
-        stage('Reportes Finales en Master') {
-            agent any
+        stage('Publish Results') {
+            agent { label 'principal'}
             steps {
-                unstash 'reporte-unit'
-                unstash 'reporte-rest'
-                junit 'unit-test-report.xml'
-                junit 'rest-test-report.xml'
-                bat 'whoami'
-                bat 'hostname'
+                cleanWs()
+                unstash 'quality-reports'
+                unstash 'service-reports'
+                
+                junit 'result*.xml'
+                
+                recordIssues tools: [flake8(name:'flake8', pattern:'flake8.out')], qualityGates: [[threshold:8, type: 'TOTAL', unstable:true], [threshold:10, type: 'TOTAL', unstable:false]]
+
+                recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')], qualityGates: [[threshold: 2, type: 'TOTAL', unstable: true],[threshold: 4, type: 'TOTAL', unstable: false]]
+
+                recordCoverage qualityGates: [[criticality: 'NOTE', integerThreshold: 95, metric: 'LINE', threshold: 95.0], [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], [criticality: 'NOTE', integerThreshold: 90, metric: 'BRANCH', threshold: 90.0], [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0]], tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']]
+
+                perfReport sourceDataFiles: 'flask.jtl'
             }
         }
     }
