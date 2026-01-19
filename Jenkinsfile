@@ -2,12 +2,12 @@ pipeline {
   agent any
       stages {
           
-        stage('Get Code') {
-          steps {
-            git branch 'feature_fix_coverage', url: 'https://github.com/eternalscythe/cp1-unir.git' 
-            echo WORKSPACE
-            bat 'dir'
-          }
+       stage('Get Code') {
+            steps {
+                checkout scm
+                echo "${WORKSPACE}"
+                bat 'dir'
+            }
         }
         
         stage('Unit') {
